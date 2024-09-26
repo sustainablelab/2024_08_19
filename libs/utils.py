@@ -31,6 +31,9 @@ class Color:
     light_grey = pygame.Color((80,)*3)
     red        = pygame.Color(255,0,0)
 
+    def transparent(self, color:pygame.Color, a:int=100) -> pygame.Color:
+        return pygame.Color(color.r, color.g, color.b, a)
+
 class Text:
     def __init__(self) -> None:
         self.msg = ""
@@ -120,15 +123,22 @@ class Xfm:
     """
     def __init__(self, game) -> None:
         self.game = game
-    def world_to_render(self, p:tuple) -> tuple:
+    def world_to_render(self, p:tuple, surf:Surface=None) -> tuple:
         x,y = p # Point in World coordinates
         k = self.game.scale # Scale from world coords to pixel coords
-        w,h = self.game.osWindow.surf.get_size()
+        if surf:
+            w,h = surf.get_size()
+        else:
+            w,h = self.game.osWindow.surf.get_size()
         e,f = (w/2, h/2) # Translation vector t_r in pixel coords
         return (int(k*x + e), int(-k*y + f))
-    def render_to_world(self, p:tuple) -> tuple:
+    def render_to_world(self, p:tuple, surf:Surface=None) -> tuple:
         x,y = p # Point in Render coordinates
         k_ = 1/self.game.scale
+        if surf:
+            w,h = surf.get_size()
+        else:
+            w,h = self.game.osWindow.surf.get_size()
         w,h = self.game.osWindow.surf.get_size()
         e,f = (w/2, h/2) # Translation vector t_r in pixel coords
         return (k_*(x-e), -k_*(y-f))
