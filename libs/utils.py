@@ -3,10 +3,11 @@
 """Utilities
 """
 
-import logging
 import pygame
 from pygame import Rect, Surface
 from dataclasses import dataclass
+import logging
+# logger = logging.getLogger(__name__) # Uncomment this if I use the logger
 
 def setup_logging(loglevel:str="DEBUG") -> logging.Logger:
     logger = logging.getLogger()
@@ -24,15 +25,28 @@ class OsWindow:
         flags = pygame.RESIZABLE
         self.surf = pygame.display.set_mode(window_size, flags=flags)
 
+# TODO: find a way to make color names and values defined in one place
 @dataclass
 class Color:
     white      = pygame.Color((255,)*3)
     grey       = pygame.Color((40,)*3)
-    light_grey = pygame.Color((80,)*3)
+    med_grey   = pygame.Color((80,)*3)
+    light_grey = pygame.Color((120,)*3)
     red        = pygame.Color(255,0,0)
 
     def transparent(self, color:pygame.Color, a:int=100) -> pygame.Color:
         return pygame.Color(color.r, color.g, color.b, a)
+
+    def name(self, color:pygame.Color) -> str:
+        color_tuple = (color.r, color.g, color.b)
+        match color_tuple:
+            case (255,255,255): color_name = 'white'
+            case (40,40,40): color_name = 'grey'
+            case (80,80,80): color_name = 'med_grey'
+            case (120,120,120): color_name = 'light_grey'
+            case (255,0,0): color_name = 'red'
+            case _: color_name = 'unknown'
+        return color_name
 
 class Text:
     def __init__(self) -> None:

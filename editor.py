@@ -7,6 +7,20 @@ Rules
 1. The same position cannot have more than one tile. Placing a tile over an
 existing tile, therefore, replaces the existing tile with the new tile.
 
+User Instructions
+-----------------
+* Number keys (1,2,3,4,...) to select the tile style
+* Move tile cursor with mouse
+    * left-click to place a tile
+    * right-click to erase a tile
+* Alternatively, move tile cursor with w,a,s,d
+    * space to place a tile
+    * if a tile is in the spot, space erases the tile
+    * putting the above two steps together, press space twice to replace a
+      tile with a new tile
+
+Dev
+---
 [x] Open a window
 [x] Create class CpuRenderer to use pygame draw calls
 [x] Create a debug HUD
@@ -17,7 +31,8 @@ existing tile, therefore, replaces the existing tile with the new tile.
     * Create drawing surface for cursor:
         * Cursor().blah()
         * CpuRenderer.render() calls 
-[ ] Display tile types at top of screen
+[x] Display tile styles at top of screen
+[x] Display style number of tile under tiles at top of screen
 [x] Use mouse to draw TileMap
     * [x] Left-click places a tile
     * [x] Right-click erases a tile
@@ -28,19 +43,21 @@ existing tile, therefore, replaces the existing tile with the new tile.
     [x] * <Space> toggles place/erase
         * erase tile if a tile exists
         * place tile if empty
-[ ] Save to file
+[x] Save to file
 [ ] Load from file
+    * For now I am saving in Editor and loading in Game.
 """
 
 import atexit
 import sys
 import os
+import json
 import pygame
 from pygame import Surface
 from pathlib import Path
 from libs.utils import setup_logging
 from libs.utils import OsWindow, Color, Text, Xfm
-from libs.tile import Tile
+from libs.tile import Tile, TileMap, TileMapEncoder
 from libs.frect import FRect
 
 
@@ -73,6 +90,7 @@ class UI:
                 case pygame.MOUSEMOTION: self.MOUSEMOTION(event)
                 case _: logger.debug(event)
     def KEYDOWN(self, event) -> None:
+        kmod = pygame.key.get_mods()
         match event.key:
             case pygame.K_q: sys.exit()
             case pygame.K_F2: self.game.debug = not self.game.debug
@@ -82,7 +100,11 @@ class UI:
             case pygame.K_4: self.game.cursor.style = 4
             # W,A,S,D to move cursor (as alternative to using mouse)
             case pygame.K_w: self.game.cursor.use_mpos = False; self.game.cursor.move('up')
-            case pygame.K_s: self.game.cursor.use_mpos = False; self.game.cursor.move('down')
+            case pygame.K_s:
+                if kmod & pygame.KMOD_CTRL:
+                    self.game.tileMap.save()
+                else:
+                    self.game.cursor.use_mpos = False; self.game.cursor.move('down')
             case pygame.K_a: self.game.cursor.use_mpos = False; self.game.cursor.move('left')
             case pygame.K_d: self.game.cursor.use_mpos = False; self.game.cursor.move('right')
             # Space to place tiles (or replace tiles or erase tiles)
@@ -109,13 +131,14 @@ class CpuRenderer:
     def render(self) -> None:
         surf = self.game.osWindow.surf
         def render_tileMap() -> None:
-            for tile in drawing['tiles_list']:
+            for tile in drawing['tile_list']:
                 render_vertices = [self.game.xfm.world_to_render(p) for p in tile.art]
                 # Draw fill
                 pygame.draw.polygon(surf, tile.color, render_vertices)
                 # Draw border
-                pygame.draw.polygon(surf, Color.white, render_vertices,
-                                    width=2 if self.game.debug else 1)
+                border_color = Color.light_grey if tile.color==Color.white else Color.white
+                pygame.draw.polygon(surf, border_color, render_vertices,
+                                    width=3 if self.game.debug else 1)
         surf.fill(Color.grey)
         # Catch programmer error
         todo_drawings = []                              # DEBUG
@@ -127,6 +150,7 @@ class CpuRenderer:
                 case _:
                     todo_drawings.append(name)
         self.game.cursor.render(surf)
+        self.game.cursor.render_styles(surf)
         if self.game.textHud:
             self.game.textHud.msg += f"\n{'-'*50}"
             if todo_drawings == []:
@@ -184,7 +208,7 @@ class Cursor:
             self.pos = editor.snap_pos_to_grid(xfm.render_to_world(mpos)) # Xfm and snap
         mpos = xfm.world_to_render(self.pos) # Xfm back to pixels
         # DEBUG
-        self.game.textHud.msg += f"\nCursor: {self.pos}"
+        if self.game.textHud: self.game.textHud.msg += f"\nCursor: {self.pos}"
         # Center tile on mouse
         tile_frect = FRect(mpos, size_pixels) # Make an FRect (+y is up) in pixel space
         tile_rect = pygame.Rect(tile_frect.bottomleft, size_pixels) # +y is down
@@ -199,6 +223,39 @@ class Cursor:
         pygame.draw.polygon(cursor_surf, Color.white, render_vertices, width=1)
         ### blit(source, dest, area=None, special_flags=0) -> Rect
         surf.blit(cursor_surf, tile_rect.topleft, special_flags=pygame.BLEND_ALPHA_SDL2)# Use alpha blending
+
+    def render_styles(self, surf) -> None:
+        """Blit tyle style surfaces onto the OS Window surface."""
+        xfm = self.game.xfm
+        scale = self.game.scale
+        for n in self.style_dict:
+            # Get color, pixel-space vertices, and pixel space Rect for surf position
+            name = str(n)
+            style = self.style_dict[n]
+            color = style['color']
+            tile = Tile((0,0), color)
+            size_pixels = (tile.size[0]*scale, tile.size[1]*scale)
+            pos_w = (-1+2*n,2) # World coordinates
+            pos_p = xfm.world_to_render(pos_w) # Render coordinates
+            tile_frect = FRect(pos_p, size_pixels)
+            tile_rect = pygame.Rect(tile_frect.bottomleft, size_pixels)
+            tile_surf = pygame.Surface((size_pixels[0]+1, size_pixels[1]+1))
+            render_vertices = [xfm.world_to_render(p, tile_surf) for p in tile.art]
+            pygame.draw.polygon(tile_surf, tile.color, render_vertices)
+            border_color = Color.light_grey if tile.color==Color.white else Color.white
+            pygame.draw.polygon(tile_surf, border_color, render_vertices,
+                                width=5 if self.style==n else 1)
+            # Draw to OS Window
+            surf.blit(tile_surf, tile_rect.topleft)
+            # Add Text under the style
+            text = Text()
+            text.msg = name
+            # Find the width of the text
+            _surf = text.font.render(text.msg, True, Color.white)
+            w = _surf.get_width()
+            # Use text width to center the position
+            text.pos = (tile_rect.midbottom[0] - w/2, tile_rect.midbottom[1])
+            text.render(surf)
 
 class Editor:
     def __init__(self, game) -> None:
@@ -223,36 +280,17 @@ class Editor:
         tile_dict = self.game.tileMap.tile_dict
         if self.has_tile(pos_world):
             del tile_dict[tile_name]
-        # pos = self.snap_pos_to_grid(pos_world)
-        # tile_name = str(pos)
-        # tile_dict = self.game.tileMap.tile_dict
-        # if tile_name in tile_dict:
-        #     del tile_dict[tile_name]
 
-class TileMap:
+class TileMapEditor(TileMap):
     def __init__(self, game) -> None:
-        self.game = game
-        self.tile_dict = {}
+        super().__init__(game)
 
-    @property
-    def tiles_list(self) -> list:
-        """Return list of tiles. Each tile is an instance of Tile.
-
-        For each tile:
-            tile.pos is the tile center.
-            tile.color is the tile color.
-            tile.art is the four vertices of the tile.
-        """
-        _tiles_list = []
-        for k in self.tile_dict:
-            v = self.tile_dict[k]
-            tile = Tile(v['pos'], v['color'])
-            _tiles_list.append(tile)
-        return _tiles_list
-
-    def draw(self) -> None:
-        self.game.drawings['tileMap'] = {}
-        self.game.drawings['tileMap']['tiles_list'] = self.tiles_list
+    def save(self) -> None:
+        """Save current TileMap to file."""
+        file = "level1.json"
+        with open(file, "w") as f:
+            json.dump(self.tile_dict, f, cls=TileMapEncoder, indent=4)
+        logger.info(f"Saved TileMap to \"{file}\"")
 
 class Game:
     def __init__(self) -> None:
@@ -271,7 +309,7 @@ class Game:
         self.cursor = Cursor(self)
         self.drawings = {}
         # Drawable game objects
-        self.tileMap = TileMap(self)
+        self.tileMap = TileMapEditor(self)
 
     def run(self) -> None:
         while True: self.game_loop()
