@@ -43,9 +43,13 @@
 * [ ] Add interaction with tiles:
     * Right now the only interaction is that tiles act as immovable walls.
     * Add a "behavior" property to Tiles
+    * [x] Create "behavior" "push", "pass", "stop"
+        * "push": Player can push tile
+        * "pass": Player passes over tile
+        * "stop": Player is stopped by tile
     * [ ] Create "behavior" "win":
           When the player reaches the "win" tile, they advance to the next level.
-    * [ ] Create "behavior" "push":
+    * [ ] Add to "behavior" "push":
           When the player pushes a pushable tile, it moves if the player is
           big enough to move it.
 * [ ] Create levels.
@@ -73,7 +77,7 @@ from pygame import Rect, Surface
 from libs.frect import FRect
 from libs.utils import setup_logging
 from libs.utils import OsWindow, Color, Text, Xfm
-from libs.tile import Tile, TileMap, TileMapEncoder, decode_tile_map_json
+from libs.tile import Tile, TileMap, TileMapEncoder, decode_tile_map_json, Physics
 
 def shutdown(filename:str) -> None:
     logger.info(f"Shutdown {filename}")
@@ -99,7 +103,7 @@ class UI:
             case pygame.K_w: self.game.player.move("up")
             case pygame.K_s:
                 if (kmod & pygame.KMOD_CTRL):
-                    self.game.tileMap.save() # TEMPORARY: save TileMap
+                    self.game.tileMap.save("level1.json") # TEMPORARY: save TileMap
                 else:
                     self.game.player.move("down")
             case pygame.K_a: self.game.player.move("left")
@@ -110,7 +114,7 @@ class UI:
             # Ctrl+L load
             case pygame.K_l:
                 if (kmod & pygame.KMOD_CTRL):
-                    self.game.tileMap.load() # TEMPORARY: load TileMap
+                    self.game.tileMap.load("level1.json") # TEMPORARY: load TileMap
                 else:
                     pass
             case _: logger.debug(event)
@@ -276,54 +280,9 @@ class Player:
             self.game.drawings['player']['debug']['color'] = Color.white
             self.game.drawings['player']['debug']['tiles_overlay'] = self.debug_tiles
 
-    def _is_collision(self, tile:Tile) -> bool:
-        return ((self.hitbox.right > tile.hitbox.left) and
-                (self.hitbox.left < tile.hitbox.right) and
-                (self.hitbox.top > tile.hitbox.bottom) and
-                (self.hitbox.bottom < tile.hitbox.top))
-
-    def list_colliding_tiles(self) -> list:
-        """Return list of colliding tiles."""
-        return [tile for tile in self.game.tileMap.tile_list if self._is_collision(tile)]
-
-    def is_colliding(self) -> bool:
-        logger.info(str(self.pos))
-        collision = False
-        # Get Tile List
-        tiles = self.game.tileMap.tile_list
-        for tile in tiles:
-            if self._is_collision(tile):
-                collision = True; break
-        return collision
-
+    # TODO: add animation (call player.move() to do more than just call physics.move())
     def move(self, direction:str) -> None:
-        m = self.game.movement_amount                   # Move by half-tiles
-        old_pos = self.pos # Restore old position if there is a collision
-        match direction:
-            case "up":
-                self.pos = (self.pos[0], self.pos[1]+m)
-            case "down":
-                self.pos = (self.pos[0], self.pos[1]-m)
-            case "left":
-                self.pos = (self.pos[0]-m, self.pos[1])
-            case "right":
-                self.pos = (self.pos[0]+m, self.pos[1])
-
-        # TODO: match player response to tile behavior
-        for tile in self.list_colliding_tiles():
-            logger.info(tile)
-            match tile.behavior:
-                case 'stop': self.pos = old_pos
-                case 'pass': pass
-                case 'push':
-                    old_name = tile.name # Use name to update the 'TileMap().tile_dict'
-                    tile.move(direction, m) # Move this tile (doesn't update dict yet)
-                    self.game.tileMap.update_tile(old_name, tile) # Update 'TileMap().tile_dict'
-                case _:
-                    pass
-
-
-
+        self.game.physics.move(self, direction)
 
     def scale(self, direction:str) -> None:
         match direction:
@@ -350,65 +309,19 @@ class TileMapGame(TileMap):
     def __init__(self, game) -> None:
         super().__init__(game)
         if 1: # Change to 0 to debug serialization
-            self.load() # Create self.tile_dict. TODO: loading happens elsewhere
+            self.load("level1.json") # Create self.tile_dict. TODO: loading happens elsewhere
         else:
             self.load_to_debug_serialization()
 
     # DEBUGGING
     def load_to_debug_serialization(self) -> None:
         self.tile_dict = {}
-        positions = [(1,-1), (2,-1), (3,-1), (5,-1)]
-        for pos in positions:
-            name = str(pos)
-            self.tile_dict[name] = {}
-            self.tile_dict[name]['pos'] = pos
-            self.tile_dict[name]['color'] = Color.light_grey
-
-    def load(self) -> None:
-        """Load TileMap (dict of tiles) from file.
-
-        Example JSON TileMap with four tiles
-        ------------------------------------
-        {
-            "(1, -1)": {
-                "pos": [ 1, -1 ],
-                "color": [ 80, 80, 80, 255 ]
-            },
-            "(2, -1)": {
-                "pos": [ 2, -1 ],
-                "color": [ 80, 80, 80, 255 ]
-            },
-            "(3, -1)": {
-                "pos": [ 3, -1 ],
-                "color": [ 80, 80, 80, 255 ]
-            },
-            "(5, -1)": {
-                "pos": [ 5, -1 ],
-                "color": [ 80, 80, 80, 255 ]
-            }
-        }
-
-        Example of same TileMap but generated in Python code
-        ----------------------------------------------------
-            positions = [(1,-1), (2,-1), (3,-1), (5,-1)]
-            for pos in positions:
-                name = str(pos)
-                tiles[name] = {}
-                tiles[name]['pos'] = pos
-                tiles[name]['color'] = Color.light_grey
-        """
-        file = "level1.json"
-        with open(file) as f:
-            # Use custom deserializer to turn color tuples back into Color objects.
-            self.tile_dict = decode_tile_map_json(json.load(f))
-        logger.info(f"Loaded TileMap from \"{file}\"")
-
-    def save(self) -> None:
-        """Save current TileMap to file."""
-        file = "level.json"
-        with open(file, "w") as f:
-            json.dump(self.tile_dict, f, cls=TileMapEncoder, indent=4)
-        logger.info(f"Saved TileMap to \"{file}\"")
+        positions = [(1,-1),      (2,-1),           (3,-1),         (5,-1)]
+        colors    = [Color.white, Color.light_grey, Color.med_grey, Color.red]
+        behaviors = ['push',      'pass',           'push',         'stop']
+        for pos,color,behavior in zip(positions, colors, behaviors):
+            tile = Tile(pos, color, behavior)
+            self.tile_dict[tile.name] = tile
 
 class Game:
     def __init__(self) -> None:
@@ -418,6 +331,7 @@ class Game:
         # Game engine
         self.osWindow = OsWindow(window_size=(500,180))
         self.uI = UI(self)
+        self.physics = Physics(self)
         self.clock = pygame.time.Clock()
         self.cpuRenderer = CpuRenderer(self)
         self.player_width = 2*self.tile_width # Player width in World space. Pick any player_width
@@ -451,8 +365,8 @@ class Game:
 
     def update_drawings(self) -> None:
         """Update self.game.drawings: artwork for all game world objects."""
-        self.player.draw()
         self.tileMap.draw()
+        self.player.draw()
 
 if __name__ == '__main__':
     logger = setup_logging("INFO")

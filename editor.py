@@ -44,8 +44,10 @@ Dev
         * erase tile if a tile exists
         * place tile if empty
 [x] Save to file
-[ ] Load from file
+[x] Load from file
     * For now I am saving in Editor and loading in Game.
+[ ] Add behavior-selection to tile-cursor (pick how the tile behaves when I
+    place it down)
 """
 
 import atexit
@@ -102,13 +104,19 @@ class UI:
             case pygame.K_w: self.game.cursor.use_mpos = False; self.game.cursor.move('up')
             case pygame.K_s:
                 if kmod & pygame.KMOD_CTRL:
-                    self.game.tileMap.save()
+                    self.game.tileMap.save("level1.json")
                 else:
                     self.game.cursor.use_mpos = False; self.game.cursor.move('down')
             case pygame.K_a: self.game.cursor.use_mpos = False; self.game.cursor.move('left')
             case pygame.K_d: self.game.cursor.use_mpos = False; self.game.cursor.move('right')
             # Space to place tiles (or replace tiles or erase tiles)
             case pygame.K_SPACE: self.game.cursor.space()
+            # Ctrl+L load
+            case pygame.K_l:
+                if (kmod & pygame.KMOD_CTRL):
+                    self.game.tileMap.load("level1.json") # TEMPORARY: load TileMap
+                else:
+                    pass
     def MOUSEMOTION(self, event) -> None:
         self.game.cursor.use_mpos = True
     def MOUSEBUTTONDOWN(self, event) -> None:
@@ -266,7 +274,10 @@ class Editor:
 
     def place_tile(self, pos_world:tuple) -> None:
         pos = self.snap_pos_to_grid(pos_world)
-        self.game.tileMap.tile_dict[str(pos)] = {'pos': pos, 'color': self.game.cursor.color}
+        color = self.game.cursor.color
+        behavior = "stop"
+        tile = Tile(pos, color, behavior)
+        self.game.tileMap.tile_dict[tile.name] = tile
 
     def has_tile(self, pos_world:tuple) -> bool:
         pos = self.snap_pos_to_grid(pos_world)
@@ -284,13 +295,6 @@ class Editor:
 class TileMapEditor(TileMap):
     def __init__(self, game) -> None:
         super().__init__(game)
-
-    def save(self) -> None:
-        """Save current TileMap to file."""
-        file = "level1.json"
-        with open(file, "w") as f:
-            json.dump(self.tile_dict, f, cls=TileMapEncoder, indent=4)
-        logger.info(f"Saved TileMap to \"{file}\"")
 
 class Game:
     def __init__(self) -> None:

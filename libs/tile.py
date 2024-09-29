@@ -10,6 +10,7 @@ are squares with side length 'Tile().TILE_WIDTH'.
       vertices.
 """
 
+import sys
 import json
 import pygame
 if __name__ == '__main__':
@@ -21,18 +22,21 @@ else:
 import logging
 logger = logging.getLogger(__name__)
 
+
 class Tile:
-    def __init__(self, pos=(0,0), color=Color.light_grey) -> None:
+    """Define a tile in the TileMap. See also TileMap."""
+    def __init__(self, pos=(0,0), color=Color.light_grey, behavior='stop') -> None:
         self.pos = pos
         self.color = color
-        self.TILE_WIDTH = 1                             # KEEP THIS AT 1
+        self.behavior = behavior
         # stop, pass, push
-        self.behavior = 'push'
 
     def __repr__(self) -> str:
         hitbox = self.hitbox
-        return (f"Tile(pos={self.pos}, color=Color.{self.color_name}): "
-               f"behavior=\"{self.behavior}\", name=\"{self.name}\"")
+        return (f"Tile(pos={self.pos}, color=Color.{self.color_name}, behavior=\"{self.behavior}\")")
+
+    @property
+    def TILE_WIDTH(self) -> int: return 1 # KEEP THIS AT 1 (@property excludes this from JSON).
 
     @property
     def name(self) -> str:
@@ -45,6 +49,9 @@ class Tile:
     @property
     def size(self) -> tuple:
         return (self.TILE_WIDTH, self.TILE_WIDTH)
+
+    # def move(self, direction:str) -> None:
+    #     self.game.
 
     def move(self, direction:str, movement_amount:float) -> None:
         m = movement_amount
@@ -81,9 +88,45 @@ class Tile:
                 ]
 
 class TileMap:
+    """Store Tiles in a dict: {"(x, y)": Tile(), }. See also Tile."""
     def __init__(self, game) -> None:
         self.game = game
         self.tile_dict = {}
+
+    def save(self, file:str) -> None:
+        """Save current TileMap to file."""
+        with open(file, "w") as f:
+            json.dump(self.tile_dict, f, cls=TileMapEncoder, indent=4)
+        logger.info(f"Saved TileMap to \"{file}\"")
+
+    def load(self, file:str) -> None:
+        """Load TileMap (dict of tiles) from file.
+
+        Example JSON TileMap with four tiles
+        ------------------------------------
+        {
+            "(1, -1)": {
+                "pos": [ 1, -1 ],
+                "color": [ 80, 80, 80, 255 ]
+            },
+            "(2, -1)": {
+                "pos": [ 2, -1 ],
+                "color": [ 80, 80, 80, 255 ]
+            },
+            "(3, -1)": {
+                "pos": [ 3, -1 ],
+                "color": [ 80, 80, 80, 255 ]
+            },
+            "(5, -1)": {
+                "pos": [ 5, -1 ],
+                "color": [ 80, 80, 80, 255 ]
+            }
+        }
+        """
+        with open(file) as f:
+            # Use custom deserializer to turn Tile.__dict__ vars back into Tile objects.
+            self.tile_dict = decode_tile_map_json(json.load(f))
+        logger.info(f"Loaded TileMap from \"{file}\"")
 
     @property
     def tile_list(self) -> list:
@@ -125,31 +168,30 @@ class TileMap:
         Tile(pos=(3, -1), center=(3, -1))
         Tile(pos=(5, -1), center=(5, -1))
         """
-        _tile_list = []
-        for k in self.tile_dict:
-            v = self.tile_dict[k]
-            tile = Tile(v['pos'], v['color'])
-            _tile_list.append(tile)
-        return _tile_list
+        if 0:
+            _tile_list = []
+            for k in self.tile_dict:
+                v = self.tile_dict[k]
+                tile = Tile(v['pos'], v['color'])
+                _tile_list.append(tile)
+            return _tile_list
+        else:
+            return list(self.tile_dict.values())
 
     def draw(self) -> None:
         """Update Game.drawings['tileMap']."""
         self.game.drawings['tileMap'] = {}              # Create drawing "tileMap"
         self.game.drawings['tileMap']['tile_list'] = self.tile_list
 
-    def update_tile(self, old_tile_name:str, new_tile:tuple) -> None:
-        """Update old tile in TileMap with new tile."""
-        # First: remove old tile from TileMap dict. Keep its values in 'tile_values' for re-inserting.
-        tile_values = self.tile_dict.pop(old_tile_name)
-
-        # Update the position in 'tile_values'
-        tile_values['pos'] = new_tile.pos
-
-        ## TODO: handle the case that there is already a tile at the new position (make this an assert: it should never happen!)
-        ## Until I fix this, the pushed tile overwrites (erases) any existing tiles.
-
-        # Insert tile back into 'TileMap().tile_dict'
-        self.tile_dict[new_tile.name] = tile_values
+    def push_tile(self, old_tile_name:str, direction:str) -> bool:
+        """Update tile map when a tile is pushed. Return True if the tile moves."""
+        tile = self.tile_dict[old_tile_name] # Reference to tile in dict (changing tile also changes the tile_dict)
+        old_pos = tile.pos
+        del self.tile_dict[old_tile_name] # Remove tile from dict to avoid colliding with its old position
+        # tile.move(direction, self.game.movement_amount) # Move the tile
+        self.game.physics.move(tile, direction) # Move the tile
+        self.tile_dict[tile.name] = tile # Use new position as new dict key
+        return old_pos != tile.pos # Return True if position changed.
 
 class TileMapEncoder(json.JSONEncoder):
     """Tell json.dump() how to encode tiles.
@@ -160,13 +202,27 @@ class TileMapEncoder(json.JSONEncoder):
     has a "color"; the type() of this color is 'pygame.Color'.
     """
     def default(self, obj):
-        if isinstance(obj, pygame.Color):
+        if isinstance(obj, Tile):
+            return vars(obj)
+        elif isinstance(obj, pygame.Color):
             return tuple(obj)
         else:
             logger.error(f"Add 'elif' statement to serialize \"{type(obj)}\": {obj}")
             sys.exit()
 
-def decode_tile_map_json(tile_dict:dict) -> dict:
+def decode_tile_map_json(tile_map_json:dict) -> dict:
+    tile_dict = {} # Return this
+    for name in tile_map_json:
+        # Get pos, color, and behavior from JSON
+        pos = tile_map_json[name]['pos']
+        # Replace every 'color' tuple with type pygame.Color
+        color = pygame.Color(tile_map_json[name]['color'])
+        behavior = tile_map_json[name]['behavior']
+        tile_dict[name] = Tile(pos, color, behavior)
+    return tile_dict
+
+# def decode_tile_map_json(tile_dict:dict) -> dict:
+def old_decode_tile_map_json(tile_dict:dict) -> dict:
     """Convert basic types from JSON file back into custom objects.
 
     Conversions
@@ -181,6 +237,46 @@ def decode_tile_map_json(tile_dict:dict) -> dict:
         color = pygame.Color(tile_dict[name]['color'])
         tile_dict[name]['color'] = color
     return tile_dict
+
+class Physics:
+    """Physics for tile interactions: player-tile and tile-tile."""
+    def __init__(self, game) -> None:
+        self.game = game
+
+    def _is_colliding(self, entity, tile:Tile) -> bool:
+        """Return True if entity is colliding with tile."""
+        return ((entity.hitbox.right > tile.hitbox.left) and
+                (entity.hitbox.left < tile.hitbox.right) and
+                (entity.hitbox.top > tile.hitbox.bottom) and
+                (entity.hitbox.bottom < tile.hitbox.top))
+
+    def list_colliding_tiles(self, entity) -> list:
+        """Return list of tiles colliding with entity."""
+        return [tile for tile in self.game.tileMap.tile_list if self._is_colliding(entity, tile)]
+
+    def move(self, entity, direction:str) -> None:
+        m = self.game.movement_amount # Move by half-tiles
+        old_pos = entity.pos          # Restore old position if there is a collision
+        match direction:
+            case "up":
+                entity.pos = (entity.pos[0], entity.pos[1]+m)
+            case "down":
+                entity.pos = (entity.pos[0], entity.pos[1]-m)
+            case "left":
+                entity.pos = (entity.pos[0]-m, entity.pos[1])
+            case "right":
+                entity.pos = (entity.pos[0]+m, entity.pos[1])
+
+        for tile in self.list_colliding_tiles(entity):
+            logger.debug(tile)
+            match tile.behavior:
+                case 'stop': entity.pos = old_pos
+                case 'pass': pass
+                case 'push': 
+                    if self.game.tileMap.push_tile(tile.name, direction): pass
+                    else: entity.pos = old_pos
+                case _:
+                    pass
 
 if __name__ == '__main__':
     from pathlib import Path
