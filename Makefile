@@ -1,3 +1,8 @@
+.PHONY: run
+run:
+	./game.py &
+	./editor.py
+
 .PHONY: tags
 tags:
 	ctags -R .
