@@ -41,17 +41,23 @@
     * Size change will be a game mechanic.
 * [x] Create a level editor.
 * [ ] Add interaction with tiles:
-    * Right now the only interaction is that tiles act as immovable walls.
+    * Initially, the only interaction is that tiles act as immovable walls.
     * Add a "behavior" property to Tiles
     * [x] Create "behavior" "push", "pass", "stop"
         * "push": Player can push tile
         * "pass": Player passes over tile
         * "stop": Player is stopped by tile
+    * A game needs a win condition
     * [ ] Create "behavior" "win":
           When the player reaches the "win" tile, they advance to the next level.
+    * Make push more interesting
     * [ ] Add to "behavior" "push":
           When the player pushes a pushable tile, it moves if the player is
           big enough to move it.
+* [x] Open window left of center (and open Editor window right of center)
+    * ;m<Space> to open both game and editor window at the same time
+    * ;<Space> still just opens application for whichever buffer is active
+* [x] Add player speed. Hold down key and player moves at that speed.
 * [ ] Create levels.
     * Introduce basic size change puzzles.
     * Then come up with levels that act as tiles so that the size change
@@ -68,6 +74,7 @@
     * Works for any size player
 """
 
+import os
 import atexit
 import sys
 import json
@@ -93,7 +100,14 @@ class UI:
             match event.type:
                 case pygame.QUIT: sys.exit()
                 case pygame.KEYDOWN: self.KEYDOWN(event)
+                case pygame.KEYUP: self.KEYUP(event)
                 case _: logger.debug(event)
+    def KEYUP(self, event) -> None:
+        match event.key:
+            case pygame.K_w: self.game.player.stop("up")
+            case pygame.K_s: self.game.player.stop("down")
+            case pygame.K_a: self.game.player.stop("left")
+            case pygame.K_d: self.game.player.stop("right")
     def KEYDOWN(self, event) -> None:
         kmod = pygame.key.get_mods()
         match event.key:
@@ -191,6 +205,13 @@ class Player:
     def __init__(self, game) -> None:
         self.game = game
         self.pos = (-1,0) # Player starts in center of screen
+        self.move_dict = {}
+        self.move_dict['up'] = False
+        self.move_dict['down'] = False
+        self.move_dict['left'] = False
+        self.move_dict['right'] = False
+        self.move_timer = 0
+        self.move_speed = 5 # Move once per N ticks of game frame rate
 
     @property
     def size(self) -> tuple:
@@ -281,8 +302,13 @@ class Player:
             self.game.drawings['player']['debug']['tiles_overlay'] = self.debug_tiles
 
     # TODO: add animation (call player.move() to do more than just call physics.move())
+    # TODO: add speed to limit how fast player moves
     def move(self, direction:str) -> None:
-        self.game.physics.move(self, direction)
+        self.move_dict[direction] = True
+        self.move_timer = 0
+
+    def stop(self, direction:str) -> None:
+        self.move_dict[direction] = False
 
     def scale(self, direction:str) -> None:
         match direction:
@@ -327,9 +353,10 @@ class Game:
     def __init__(self) -> None:
         pygame.init()
         pygame.font.init()
+        os.environ["SDL_VIDEO_WINDOW_POS"] = "550,500"
         self.debug = True
         # Game engine
-        self.osWindow = OsWindow(window_size=(500,180))
+        self.osWindow = OsWindow(window_size=(600,480))
         self.uI = UI(self)
         self.physics = Physics(self)
         self.clock = pygame.time.Clock()
@@ -358,10 +385,21 @@ class Game:
     def game_loop(self) -> None:
         self.textHud = TextHud(self) if self.debug else None
         self.uI.handle_events()
+        self.update_physics()
         self.update_drawings()                          # Update global drawing dict
         self.cpuRenderer.render()                       # Render drawing dict on CPU
         ### tick(framerate=0) -> milliseconds
         self.clock.tick(60)
+
+    def update_physics(self) -> None:
+        # Move the player
+        if self.player.move_timer == 0:
+            self.player.move_timer = self.player.move_speed
+            for direction in self.player.move_dict:
+                if self.player.move_dict[direction]:
+                    self.physics.move(self.player, direction)
+        else:
+            self.player.move_timer -= 1
 
     def update_drawings(self) -> None:
         """Update self.game.drawings: artwork for all game world objects."""

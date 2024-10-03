@@ -159,6 +159,7 @@ class CpuRenderer:
                     todo_drawings.append(name)
         self.game.cursor.render(surf)
         self.game.cursor.render_styles(surf)
+        self.game.cursor.render_behavior(surf)
         if self.game.textHud:
             self.game.textHud.msg += f"\n{'-'*50}"
             if todo_drawings == []:
@@ -174,6 +175,7 @@ class Cursor:
         self.game = game
         self.use_mpos = True # True if mouse moves; False if W,A,S,D pressed
         self.pos = (0,0) # Cursor position in World space
+        self.behavior = 'stop'
         self.style = 1
         self.style_dict = {}
         self.style_dict[1] = {'color':Color.white}
@@ -265,6 +267,11 @@ class Cursor:
             text.pos = (tile_rect.midbottom[0] - w/2, tile_rect.midbottom[1])
             text.render(surf)
 
+    def render_behavior(self, surf) -> None:
+        """Show tile behavior as text in lower left."""
+        text = Text()
+        text.msg = self.behavior
+
 class Editor:
     def __init__(self, game) -> None:
         self.game = game
@@ -300,10 +307,11 @@ class Game:
     def __init__(self) -> None:
         pygame.init()
         pygame.font.init()
+        os.environ["SDL_VIDEO_WINDOW_POS"] = "1200,500"
         os.environ["PYGAME_BLEND_ALPHA_SDL2"] = "1"     # Use SDL2 alpha blending
         self.debug = True
         # Game engine
-        self.osWindow = OsWindow(window_size=(500,180))
+        self.osWindow = OsWindow(window_size=(600,480))
         self.uI = UI(self)
         self.cpuRenderer = CpuRenderer(self)
         self.editor = Editor(self)
