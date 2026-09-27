@@ -13,18 +13,29 @@ are squares with side length 'Tile().TILE_WIDTH'.
 import sys
 import json
 import pygame
-if __name__ == '__main__':
+try:
     from frect import FRect
     from utils import Color
-else:
+except ModuleNotFoundError:
     from libs.frect import FRect
     from libs.utils import Color
+
+# This method doesn't work with 'python -m unittest discover -s libs'
+# if __name__ == '__main__':
+#     from frect import FRect
+#     from utils import Color
+# else:
+#     from libs.frect import FRect
+#     from libs.utils import Color
 import logging
 logger = logging.getLogger(__name__)
 
 
 class Tile:
-    """Define a tile in the TileMap. See also TileMap."""
+    """Define a tile in the TileMap. See also TileMap.
+    
+    See also 'TestTile_attributes' for a list of all attributes.
+    """
     def __init__(self, pos=(0,0), color=Color.light_grey, behavior='stop') -> None:
         self.pos = pos
         self.color = color
@@ -88,7 +99,18 @@ class Tile:
                 ]
 
 class TileMap:
-    """Store Tiles in a dict: {"(x, y)": Tile(), }. See also Tile."""
+    """Store Tiles in a dict: {"(x, y)": Tile(), }. See also Tile.
+
+        tile_dict example:
+            {'(-1, -2)': Tile(pos=[-1, -2], color=Color.grey, behavior="push"),
+            '(2, -2)': Tile(pos=[2, -2], color=Color.grey, behavior="push"),
+            ...}
+
+        tile_list example:
+            [Tile(pos=[-1, -2], color=Color.grey, behavior="push"),
+             Tile(pos=[2, -2], color=Color.grey, behavior="push"),
+             ...]
+    """
     def __init__(self, game) -> None:
         self.game = game
         self.tile_dict = {}
@@ -141,42 +163,8 @@ class TileMap:
             tile.color is the tile color.
             tile.behavior is the tile behavior.
             tile.art is the four vertices of the tile.
-
-        Why not just use the dict directly? TileMap().tile_dict is NOT a
-        dictionary of Tiles. It is a dictionary of tile values ('(x, y)':
-        {'pos': (x, y), 'color': (r, g, b, a)}.
-
-        I was avoiding putting Tiles directly in the 'TileMap().tile_dict' to
-        avoid writing custom serialization when saving levels to file. This
-        was a bad decision.
-
-        TODO: store Tiles as Tiles in the TileMap().tile_dict. Get rid of the
-        conversion that happens in this function.
-
-        Example
-        -------
-        for k in self.tile_dict:
-            logger.info(f"{k}: {self.tile_dict[k]}")
-        (1, 5): {'pos': (1, 5), 'color': (40, 40, 40, 255)}
-        (2, 5): {'pos': (2, 5), 'color': (40, 40, 40, 255)}
-        (3, 5): {'pos': (3, 5), 'color': (40, 40, 40, 255)}
-        (5, 5): {'pos': (5, 5), 'color': (40, 40, 40, 255)}
-        for t in _tile_list:
-            logger.info(f"{t}")
-        Tile(pos=(1, -1), center=(1, -1))
-        Tile(pos=(2, -1), center=(2, -1))
-        Tile(pos=(3, -1), center=(3, -1))
-        Tile(pos=(5, -1), center=(5, -1))
         """
-        if 0:
-            _tile_list = []
-            for k in self.tile_dict:
-                v = self.tile_dict[k]
-                tile = Tile(v['pos'], v['color'])
-                _tile_list.append(tile)
-            return _tile_list
-        else:
-            return list(self.tile_dict.values())
+        return list(self.tile_dict.values())
 
     def draw(self) -> None:
         """Update Game.drawings['tileMap']."""

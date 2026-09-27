@@ -58,6 +58,9 @@
     * ;m<Space> to open both game and editor window at the same time
     * ;<Space> still just opens application for whichever buffer is active
 * [x] Add player speed. Hold down key and player moves at that speed.
+* [x] 'r' resets (reloads) the level
+    * [ ] 'r' resets the player position as well
+* [ ] Add undo
 * [ ] Create levels.
     * Introduce basic size change puzzles.
     * Then come up with levels that act as tiles so that the size change
@@ -128,9 +131,11 @@ class UI:
             # Ctrl+L load
             case pygame.K_l:
                 if (kmod & pygame.KMOD_CTRL):
-                    self.game.tileMap.load("level1.json") # TEMPORARY: load TileMap
+                    self.game.tileMap.load(self.game.level) # TEMPORARY: load TileMap
                 else:
                     pass
+            case pygame.K_r:
+                self.game.tileMap.load(self.game.level)
             case _: logger.debug(event)
 
 class CpuRenderer:
@@ -334,8 +339,11 @@ class TileMapGame(TileMap):
     """
     def __init__(self, game) -> None:
         super().__init__(game)
-        if 1: # Change to 0 to debug serialization
-            self.load("level1.json") # Create self.tile_dict. TODO: loading happens elsewhere
+        if 0: # Change to 0 to debug serialization
+            self.load(self.game.level) # Create self.tile_dict. TODO: loading happens elsewhere
+            logger.info(self.tile_dict)
+            logger.info(self.tile_list)
+            sys.exit()
         else:
             self.load_to_debug_serialization()
 
@@ -366,6 +374,7 @@ class Game:
         self.xfm = Xfm(self)
         self.drawings = {}
         # Drawable game objects
+        self.level = "level1.json"
         self.player = Player(self)
         self.tileMap = TileMapGame(self)
 

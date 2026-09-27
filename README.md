@@ -40,31 +40,59 @@ Tile puzzle game. Experimenting with coding design inspired by Brian:
 
 ## Setup design
 
-* `Game().__init__()`: create `game.osWindow`
-  * `OsWindow().__init__()`: create the OS Window and sets its size.
-* `Game().__init__()`: create `game.uI`
-  * `UI().handle_events()`: handle `pygame` events (`QUIT`, `KEYDOWN`, etc.)
-  * call `uI.handle_events()` in `game.game_loop()`
-* `Game().__init__()`: create `game.cpuRenderer`
-  * call `cpuRenderer.render()` in `game.game_loop()`
-* `Tile().__init__()`: define the tile width (tiles are square)
-* `Game().__init__()`: define `game.tile_width` to return `Tile().tile_width`
-* `Game().__init__()`: define `game.player_width` as a multiple of `game.tile_width`
-* `Game().__init__()`: define `game.scale` as number of pixels per unit of world space
-* `Game().__init__()`: create `game.xfm` to transform between coordinate spaces
-  * `CpuRenderer().render_blah`: use `game.xfm.world_to_render()` to transform world space vertices to pixel space
-  * `TextHud().__init__()`: use `game.xfm.render_to_world()` to transform mouse from pixel space to world space
-* `Game().__init__()`: define empty `game.drawings` dict
+`Game().__init__()` creates a lot of stuff:
+
+* `game.osWindow`
+* `game.uI`
+* `game.physics`
+* `game.clock`
+  * `pygame.time.Clock()`
+* `game.cpuRenderer`
+* `game.player`
+* `game.tileMap`
+* `game.xfm`
+
+`Game().__init__()` also defines:
+
+* `game.player_width` as a multiple of the constant `TILE_WIDTH`.
+* `game.scale` as number of pixels per unit of world space
+* `game.drawings` an empty dict
+
+### OsWindow
+`OsWindow().__init__()`: create the OS Window and sets its size.
+
+### Physics
+Handle tile interactions.
+
+### Player
+A drawable game object.
+
+* `Player().pos`: (x,y) center of player
+* `Player().size`: (w,h) size of player (player is always square)
+* `Player().hitbox`: FRect with (x,y) center and (w,h) size
+* `Player().debug_tiles`: list of tiles to draw as overlay on player
+* `Player().vertices`: convert `Player().hitbox` FRect to a list of vertices
+* `Player().draw()`: create entries in `game.drawings['player']`, expected by `CpuRenderer().render()`
+* `Player().move()`: define up/down/left/right movement in discrete steps of half a tile
+* `Player().scale()`: define grow/shrink scaling
+
+### TileMapGame(TileMap)
+A drawable game object.
+
+* `TileMap().tile_list`: a list of tiles to iterate over
+* `TileMap().save`: save TileMap to file
+* `TileMap().load`: load TileMap from file
+
+### Xfm
+* `CpuRenderer().render_player` and `render_tileMap` use `game.xfm.world_to_render()` to transform world space vertices to pixel space
+* `TextHud().__init__()` uses `game.xfm.render_to_world()` to transform mouse from pixel space to world space
+
+### UI
+* `UI().handle_events()`: handle `pygame` events (`QUIT`, `KEYDOWN`, etc.)
+* call `uI.handle_events()` in `game.game_loop()`
+
 * `Game().__init__()`: create drawable objects: `game.player`, `game.tileMap`
   * `game.player`:
-    * `Player().pos`: (x,y) center of player
-    * `Player().size`: (w,h) size of player (player is always square)
-    * `Player().hitbox`: FRect with (x,y) center and (w,h) size
-    * `Player().debug_tiles`: list of tiles to draw as overlay on player
-    * `Player().vertices`: convert `Player().hitbox` FRect to a list of vertices
-    * `Player().draw()`: create entries in `game.drawings['player']`, expected by `CpuRenderer().render()`
-    * `Player().move()`: define up/down/left/right movement in discrete steps of half a tile
-    * `Player().scale()`: define grow/shrink scaling
   * `game.tileMap`:
     * `TileMap().__init()`: call `TileMap().load()` to load JSON file into dict `game.tileMap.tile_dict`
       * `game.tileMap.tile_dict`: `{"(x, y)": {"pos": [ x, y ], "color": [ r, g, b, a ]}`
